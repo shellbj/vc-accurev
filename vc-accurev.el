@@ -57,49 +57,6 @@
    (let ((info (vc-accurev--get-info file)))
      (vc-accurev-info->top info)))
 
-(defun vc-accurev-root (file)
-  "Return the root directory of a accurev project."
-  (or (vc-file-getprop file 'accurev-root)
-      (vc-file-setprop file 'accurev-root (with-temp-buffer
-					    (let ((default-directory file))
-					      (vc-accurev-command t 0 file "info" "-v")
-					      (goto-char (point-min))
-					      (when (re-search-forward "^Top:[[:space:]]+\\(.+\\)$" nil t)
-						(match-string 1)))))))
-
-(defun vc-accurev-repository-hostname (file)
-  "Return the accurev server hostname."
-  (or (vc-file-getprop file 'accurev-repository-hostname)
-      (vc-file-setprop file 'accurev-repository-hostname
-		       (with-temp-buffer
-			 (setq default-directory dirname)
-			 (vc-accurev-command t 0 file "info")
-			 (goto-char (point-min))
-			 (when (re-search-forward "Server name:[[:space:]]+\\(.+\\)" nil t)
-			   (match-string 1))))))
-
-(defun vc-accurev-workspace-name (file)
-  "Return the accurev server hostname."
-  (or (vc-file-getprop file 'accurev-workspace-name)
-      (vc-file-setprop file 'accurev-workspace-name
-		       (with-temp-buffer
-			 (setq default-directory dirname)
-			 (vc-accurev-command t 0 file "info")
-			 (goto-char (point-min))
-			 (when (re-search-forward "Workspace/ref:[[:space:]]+\\(.+\\)" nil t)
-			   (match-string 1))))))
-
-(defun vc-accurev-basis-stream (file)
-  "Return the accurev server hostname."
-  (or (vc-file-getprop file 'accurev-basis-stream)
-      (vc-file-setprop file 'accurev-basis-stream
-		       (with-temp-buffer
-			 (setq default-directory dirname)
-			 (vc-accurev-command t 0 file "info")
-			 (goto-char (point-min))
-			 (when (re-search-forward "Basis:[[:space:]]+\\(.+\\)" nil t)
-			   (match-string 1))))))
-
 (defun vc-accurev-state (file)
   "Accurev-specific version of `vc-state'."
   (with-temp-buffer
