@@ -53,10 +53,9 @@
 ;;;###autoload 	       (vc-accurev-registered file))))
 
  (defun vc-accurev-registered (file)
-   (if (vc-accurev-root file)
-       (progn
-         (load "vc-accurev")
-         (vc-accurev-registered file))))
+   "Return non-nil if FILE is registered in this backend."
+   (let ((info (vc-accurev--get-info file)))
+     (vc-accurev-info->top info)))
 
 (defun vc-accurev-root (file)
   "Return the root directory of a accurev project."
@@ -100,11 +99,6 @@
 			 (goto-char (point-min))
 			 (when (re-search-forward "Basis:[[:space:]]+\\(.+\\)" nil t)
 			   (match-string 1))))))
-
-
-(defun vc-accurev-registered (file)
-  (vc-accurev-state file)
-  (vc-accurev-root file))
 
 (defun vc-accurev-state (file)
   "Accurev-specific version of `vc-state'."
