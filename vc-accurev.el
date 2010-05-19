@@ -104,15 +104,11 @@
   (vc-accurev-state file)
   (vc-accurev-root file))
 
-(defun vc-accurev-state (file &optional localp)
-  ;; This would assume the Meta-CVS sandbox is synchronized.
-  ;; (vc-accurev-cvs state file))
-  "Meta-CVS-specific version of `vc-state'."
-  (setq localp (or localp (vc-stay-local-p file)))
-  (let ((default-directory dir))
-    (with-temp-buffer
-      (vc-accurev-command t 0 file "stat" "-fr")
-      (vc-accurev-parse-status file)))
+(defun vc-accurev-state (file)
+  "Accurev-specific version of `vc-state'."
+  (with-temp-buffer
+    (vc-accurev-command t 0 file "stat" "-fre")
+    (last (vc-accurev-status->status (vc-accurev--parse-status file)))))
 
 (defun vc-accurev-dir-state (dir &optional localp)
   ;; This would assume the Meta-CVS sandbox is synchronized.
@@ -125,8 +121,13 @@
       (vc-accurev-parse-status))))
 
 (defun vc-accurev-workfile-version (file)
-  (vc-accurev-registered file)
-  (vc-file-getprop file 'vc-workfile-version))
+  "Return the working revision of FILE.  This is the revision fetched
+   by the last checkout or upate, not necessarily the same thing as the
+   head or tip revision.  Should return \"0\" for a file added but not yet
+   committed."
+  (with-temp-buffer
+    (vc-accurev-command t 0 file "stat" "-fre")
+    (vc-accurev-status->element-target (vc-accurev--parse-status file))))
 
 (defun vc-accurev-checkout-model (file)
   "Accurev specific version of `vc-checkout-model'."
