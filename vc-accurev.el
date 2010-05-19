@@ -13,6 +13,12 @@
 
 (eval-when-compile (require 'vc))
 
+(add-to-list 'vc-handled-backends 'Accurev)
+
+;; Clear the vc cache to force vc-call to check again and discover new
+;; fuctions when we reload this file.
+(put 'Accurev 'vc-functions nil)
+
 ;;;
 ;;; Customization options
 ;;;
