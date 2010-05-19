@@ -530,9 +530,65 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 	  ((string-match "ignored\\|excluded" code) 'ignored)
 	  ((string-match "external\\|no such elem" code) 'unregistered))))
 
+(defun vc-accurev--parse-info (info)
+  "Create a info structure from accurev's output"
+  (goto-char (point-min))
+  (while (not (eobp))
+    (cond ((looking-at "Shell:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->shell info) (match-string 1)))
+	  ((looking-at "Principal:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->principal info) (match-string 1)))
+	  ((looking-at "Host:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->host info) (match-string 1)))
+	  ((looking-at "Domain:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->domain info) (match-string 1)))
+	  ((looking-at "client_ver:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->client-version info) (match-string 1)))
+	  ((looking-at "Server name:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->server-name info) (match-string 1)))
+	  ((looking-at "Port:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->port info) (match-string 1)))
+	  ((looking-at "ACCUREV_BIN:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->bin info) (match-string 1)))
+	  ((looking-at "server_ver:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->server-version info) (match-string 1)))
+	  ((looking-at "Client time:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->client-time info) (match-string 1)))
+	  ((looking-at "Server time:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->server-time info) (match-string 1)))
+	  ((looking-at "Depot:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->depot info) (match-string 1)))
+	  ((looking-at "Workspace/ref:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->workspace info) (match-string 1)))
+	  ((looking-at "Basis:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->basis info) (match-string 1)))
+	  ((looking-at "Top:\\s-+\\(.+\\)")
+	   (setf (vc-accurev-info->top info) (match-string 1))))
+    (forward-line 1)))
+
+(defun vc-accurev--get-info (file)
+  "Create a info structure from accurev's output"
+  (let ((default-directory file)
+	(info (vc-accurev-create-info)))
+    (with-temp-buffer
+      (vc-accurev-command 't 0 file "info" "-v")
+      (vc-accurev--parse-info info)
+      info)))
+
 ;;;
 ;;; Intermediate Structures
 ;;;
+
+(defstruct (vc-accurev-info
+	    (:copier nil)
+	    (:type list)
+	    (:constructor vc-accurev-create-info (&optional top depot workspace basis
+							    server-name server-version))
+	    (:conc-name vc-accurev-info->))
+  top ;; root directory for the project workspace
+  depot workspace basis server-name server-version principal
+  domain port client-version server-time client-time
+  host bin shell)
 
 (defstruct (vc-accurev-status
 	    (:copier nil)
