@@ -27,7 +27,12 @@
 ;;; State-querying functions
 ;;;
 
-;;;###autoload
+;;;###autoload (defun vc-accurev-registered (file)
+;;;###autoload   (if (executable-find "accurev")
+;;;###autoload       (progn
+;;;###autoload 	       (load "vc-accurev")
+;;;###autoload 	       (vc-accurev-registered file))))
+
  (defun vc-accurev-registered (file)
    (if (vc-accurev-root file)
        (progn
