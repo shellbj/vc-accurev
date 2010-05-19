@@ -1,54 +1,13 @@
-;;; vc-accurev.el --- VC backend for the Meta-CVS version-control system
+;;; vc-accurev.el --- VC backend for the Accurev version-control system
 
-;; Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+;; Copyright (C) 2008 Bryan Shell
 
-;; Author:      FSF (see vc.el for full credits)
-;; Maintainer:  Stefan Monnier <monnier@gnu.org>
-
-;; This file is part of GNU Emacs.
-
-;; GNU Emacs is free software; you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation; either version 2, or (at your option)
-;; any later version.
-
-;; GNU Emacs is distributed in the hope that it will be useful,
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;; GNU General Public License for more details.
-
-;; You should have received a copy of the GNU General Public License
-;; along with GNU Emacs; see the file COPYING.  If not, write to the
-;; Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
-;; Boston, MA 02110-1301, USA.
+;; Author:      Bryan Shell
+;; Maintainer:  Bryan Shell
 
 ;;; Commentary:
 
-;; The home page of the Meta-CVS version control system is at
-;;
-;;      http://users.footprints.net/~kaz/mcvs.html
-;;
-;; This is derived from vc-cvs.el as follows:
-;; - cp vc-cvs.el vc-accurev.el
-;; - M-% mcvs RET arch RET !
-;;
-;; Then of course started the hacking.  Only a small part of the code
-;; has been touched and not much more than that was tested, so if
-;; you bump into a bug, don't be surprised: just report it to me.
-;;
-;; What has been partly tested:
-;; - C-x v v to start editing a file that was checked out with CVSREAD on.
-;; - C-x v v to commit a file
-;; - C-x v =
-;; - C-x v l
-;; - C-x v i
-;; - C-x v g
-;; - M-x vc-rename-file RET
-
 ;;; Bugs:
-
-;; - Retrieving snapshots doesn't filter `cvs update' output and thus
-;;   parses bogus filenames.  Don't know if it harms.
 
 ;;; Code:
 
