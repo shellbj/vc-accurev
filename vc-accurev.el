@@ -481,6 +481,70 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 	     (cons vc-accurev-global-switches args)
 	   (append vc-accurev-global-switches args))))
 
+(defun vc-accurev--parse-status (&optional filename)
+  "Create a status structure from accurev's output"
+  (let ((file (concat "^\\("
+		      (if filename
+			  (concat "./" (file-relative-name filename))
+			"[^[:space:]]*")
+		      "\\)\\s-+"))
+	status)
+    (goto-char (point-min))
+    (while (not (eobp))
+      (cond ((looking-at (concat file
+				 "\\([^[:space:]]*\\)\\s-+"  ;; element id
+				 "\\([^[:space:]]*\\)\\s-+"  ;; element target
+				 "(\\([^[:space:]]*\\))\\s-+" ;; version
+				 "\\(.*\\)$")) ;; stati
+	       (add-to-list 'status
+			    (vc-accurev-create-status (match-string 1) (match-string 4)
+						      (match-string 3) (match-string 2)
+						      (vc-accurev--parse-nested-statuses (match-string 5)))))
+	      ((looking-at (concat file "\\(.*\\)$")) ;; stati
+	       (add-to-list 'status
+			    (vc-accurev-create-status (match-string 1) nil nil nil
+						      (vc-accurev--parse-nested-statuses (match-string 2))))))
+      (forward-line 1))
+    (if filename (car status)
+      status)))
+
+(defun vc-accurev--parse-nested-statuses (stati)
+  "Convert a list of accurev statuses into vc states"
+  (if (string-match "(\\([^)]*\\))\\(.*\\)" stati)
+      (let ((rest (match-string 2 stati)))
+	(cons (vc-accurev--state-code (match-string 1 stati))
+	      (vc-accurev--parse-nested-statuses rest)))))
+
+(defun vc-accurev--state-code (code)
+  "Convert from a string to a vc state."
+  (let ((code (or code "")))
+    (cond ((string-match "backed" code) 'up-to-date)
+	  ((string-match "modified" code) 'edited)
+	  ((string-match "stale" code) 'needs-update)
+	  ((string-match "overlap\\|underlap" code) 'needs-merge)
+	  ((string-match "kept" code) 'added)
+	  ((string-match "defunct" code) 'removed)
+;;; ((string-match "" code) 'conflict) ;;; not needed, kept automatically after merge/patch
+	  ((string-match "missing" code) 'missing)
+	  ((string-match "ignored\\|excluded" code) 'ignored)
+	  ((string-match "external\\|no such elem" code) 'unregistered))))
+
+;;;
+;;; Intermediate Structures
+;;;
+
+(defstruct (vc-accurev-status
+	    (:copier nil)
+	    (:type list)
+	    (:constructor vc-accurev-create-status (file &optional revision element-target element-id status))
+	    (:conc-name vc-accurev-status->))
+  file
+  revision
+  element-target
+  element-id
+  element-type
+  status)
+
 (provide 'vc-accurev)
 
 ;;; vc-accurev.el ends here
