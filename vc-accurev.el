@@ -23,11 +23,22 @@
 ;;; Customization options
 ;;;
 
-(defvar vc-accurev-command
-  (let ((candidates '("accurev")))
-    (while (and candidates (not (executable-find (car candidates))))
-      (setq candidates (cdr candidates)))
-    (or (car candidates) "accurev")))
+(defgroup vc-accurev nil
+  "VC Accurev backen."
+  :version "22.2"
+  :group 'vc)
+
+(defcustom vc-accurev-program "accurev"
+  "Name of the accurev command (excluding any arguments.)"
+  :group 'vc-accurev
+  :type 'string)
+
+(defcustom vc-accurev-global-switches nil
+  "String/list of strings specifying extra switches for accurev any command under VC."
+  :type '(choice (const :tag "None" nil)
+		 (string :tag "Argument String")
+		 (repeat :tag "Argument List" :value ("") string))
+  :group 'vc-accurev)
 
 ;;;
 ;;; State-querying functions
@@ -462,9 +473,13 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 ;;; Internal functions
 ;;;
 
-(defun vc-accurev-command (buffer okstatus file &rest flags)
+(defun vc-accurev-command (buffer okstatus file-or-list &rest args)
   "A wrapper around `vc-do-command' for use in vc-accurev.el."
-  (apply 'vc-do-command buffer okstatus "accurev" file flags))
+  (apply 'vc-do-command (or buffer "*vc*") okstatus
+	 vc-accurev-program file-or-list
+	 (if (stringp vc-accurev-global-switches)
+	     (cons vc-accurev-global-switches args)
+	   (append vc-accurev-global-switches args))))
 
 (provide 'vc-accurev)
 
