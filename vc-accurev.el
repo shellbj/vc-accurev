@@ -274,15 +274,42 @@ The changes are between FIRST-VERSION and SECOND-VERSION."
 ;;; History functions
 ;;;
 
-(defun vc-accurev-print-log (file &optional buffer)
-  "Insert the revision log of FILE into BUFFER, or the *vc*
-buffer if BUFFER is nil."
-  (unless buffer (setq buffer "*vc*"))
-  (let ((default-directory (vc-accurev-root file)))
-    (vc-accurev-command
-     buffer
-     (if (and (vc-stay-local-p file) (fboundp 'start-process)) 'async 0)
-     file "hist" (vc-switches 'ACCUREV 'history))))
+(defun vc-accurev-print-log (files &optional buffer)
+  "Insert the revision log for FILES into BUFFER, or the *vc* buffer
+   if BUFFER is nil.  (Note: older versions of this function expected
+   only a single file argument.)"
+  (vc-setup-buffer buffer)
+  (let ((inhibit-read-only t))
+    (with-current-buffer buffer
+      (vc-accurev-command buffer 'async files "hist"))))
+
+(define-derived-mode vc-accurev-log-view-mode log-view-mode "Accurev-Log-View"
+  (require 'add-log) ;; we need the faces add-log
+  ;; Don't have file markers, so use impossible regexp.
+  (set (make-local-variable 'log-view-file-re) "^[ \t]*element:[ \t]+\\([^\n]+\\)")
+  (set (make-local-variable 'log-view-per-file-logs) nil)
+  (set (make-local-variable 'log-view-message-re) "^[ \t]*transaction[ \t]+\\([0-9]+\\);")
+  (set (make-local-variable 'log-view-font-lock-keywords)
+       (append
+	`((,log-view-file-re
+	   (1 'log-view-file))
+	  (,log-view-message-re
+	   (1 'change-log-acknowledgement)
+	   ("[ \t]+\\([^;]+\\);[ \t]+\\([0-9/]+ [0-9:]+\\)[ \t]+;[ \t]+user:[ \t]+\\([^;\n]+\\)" nil nil
+	    (2 'change-log-date)
+	    (3 'change-log-name))
+	   ))
+        '(("^[ \t]*eid:[ \t]\\([0-9]+\\)"
+	   (1 'log-view-file))
+	  ("^[ \t]+#\\([^\n]*\\)"
+	   (1 'log-view-message))
+	  ("^[ \t]+version \\([0-9]+/[0-9]+\\) (\\([0-9]+/[0-9]+\\))"
+	   (1 'change-log-acknowledgement)
+	   (2 'change-log-list))
+	  ("^[ \t]+ancestor:[ \t]+(\\([0-9]+/[0-9]+\\))"
+           (1 'change-log-function)
+	   ("[ \t]+merged against:[ \t]+(\\([0-9]+/[0-9]+\\))" nil nil
+	    (1 'change-log-conditionals)))))))
 
 ;;;
 ;;; Diff
