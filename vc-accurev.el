@@ -11,7 +11,9 @@
 
 ;;; Code:
 
-(eval-when-compile (require 'vc))
+(eval-when-compile
+  (require 'vc)
+  (require 'cl))
 
 (add-to-list 'vc-handled-backends 'Accurev)
 
