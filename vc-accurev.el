@@ -93,7 +93,7 @@
   "Register FILE into the Accurev version-control system.
 COMMENT can be used to provide an initial description of FILE."
   (if rev (error "Can't register explicit revision with Accurev"))
-  (vc-accurev-command nil 0 file "add"
+  (vc-accurev-command "add" nil 0 file 
 		      (if comment (concat "-c" comment))))
 
 (defalias 'vc-accurev-responsible-p 'vc-accurev-root
@@ -194,11 +194,11 @@ This is only possible if Accurev is responsible for FILE's directory.")
 	     (concat "-r" rev))
 	   switches)))
 
-(defun vc-svn-delete-file (file)
-  (vc-svn-command nil 0 file "defunct"))
+(defun vc-accurev-delete-file (file)
+  (vc-accurev-command "defunct" nil 0 file))
 
 (defun vc-accurev-rename-file (old new)
-  (vc-accurev-command nil 0 new "move" (file-relative-name old)))
+  (vc-accurev-command "move" nil 0 new old))
 
 (defun vc-accurev-revert (file &optional contents-done)
   "Revert FILE to the version it was based on."
@@ -282,7 +282,7 @@ if BUFFER is nil. If SHORTLOG is true insert a short version of the log."
   (vc-setup-buffer buffer)
   (let ((inhibit-read-only t))
     (with-current-buffer buffer
-      (vc-accurev-command buffer 'async files "hist"
+      (vc-accurev-command "hist" buffer 'async files
 			  (if shortlog "-ft")))))
 
 (define-derived-mode vc-accurev-log-view-mode log-view-mode "Accurev-Log-View"
@@ -337,7 +337,7 @@ if BUFFER is nil. If SHORTLOG is true insert a short version of the log."
    the backend command.  It should return a status of either 0 (no
    differences found), or 1 (either non-empty diff or the diff is
    run asynchronously)."
-  (apply 'vc-accurev-command (or buffer "*vc-diff*") async files "diff"
+  (apply 'vc-accurev-command "diff" (or buffer "*vc-diff*") async files 
 	 (append
 	  (if (not (or rev1 rev2)) (list "-b")) ;; diff to basis version
 	  (if rev1 (list "-v" rev1))
@@ -356,7 +356,7 @@ if BUFFER is nil. If SHORTLOG is true insert a short version of the log."
   "Return a completion table for existing revisions of FILES.
    This currently returns virtual versions."
   (with-temp-buffer
-    (vc-accurev-command t nil files "hist" "-fx")
+    (vc-accurev-command "hist" t nil files "-fx")
     (goto-char (point-min))
     (let ((ids ()))
       (while (re-search-forward "\\(?:virtualNamedVersion\\|virtual\\)=\"\\([^\"]+\\)\"" nil t)
@@ -370,7 +370,7 @@ if BUFFER is nil. If SHORTLOG is true insert a short version of the log."
 (defun vc-accurev-annotate-command (file buffer &optional version)
   "Execute \"accurev annotate\" on FILE, inserting the contents in BUFFER.
 Optional arg VERSION is a version to annotate from."
-  (vc-accurev-command buffer 0 file "annotate" "-fuvd" (if version
+  (vc-accurev-command "annotate" buffer 0 file "-fuvd" (if version
 							  (concat "-v" version))))
 
 (defconst vc-accurev-annotate-time-regex "^\\S-+\\s-+\\S-+\\s-+\\([0-9]+\\)/\\([0-9]+\\)/\\([0-9]+\\)\\s-+\\([0-9]+\\):\\([0-9]+\\):\\([0-9]+\\)")
@@ -430,7 +430,7 @@ If BRANCHP is non-nil, the current workspace is moved to that new
 stream."
   (let ((basis (vc-accurev-basis-stream dir))
 	(default-directory dir))
-    (vc-accurev-command t 0 nil "mkstream" "-s" name "-b" basis))
+    (vc-accurev-command "mkstream" t 0 nil "-s" name "-b" basis))
   (when branchp (vc-accurev-retrieve-snapshot dir name nil)))
     
 (defun vc-accurev-retrieve-snapshot (dir name update)
@@ -442,8 +442,8 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 	  (workspace (vc-accurev-workspace-name dir)))
       (erase-buffer)
       (if (and name (not (string= name "")))
-	  (vc-accurev-command t 0 nil "chws" "-w" workspace "-b" name))
-      (vc-accurev-command t 0 nil "update")
+	  (vc-accurev-command "chws" t 0 nil "-w" workspace "-b" name))
+      (vc-accurev-command "update" t 0 nil)
       (when update
 	(goto-char (point-min))
 	(while (not (eobp))
@@ -471,13 +471,10 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 ;;; Internal functions
 ;;;
 
-(defun vc-accurev-command (buffer okstatus file-or-list &rest args)
+(defun vc-accurev-command (accurev-command buffer okstatus file-or-list &rest args)
   "A wrapper around `vc-do-command' for use in vc-accurev.el."
-  (apply 'vc-do-command (or buffer "*vc*") okstatus
-	 vc-accurev-program file-or-list
-	 (if (stringp vc-accurev-global-switches)
-	     (cons vc-accurev-global-switches args)
-	   (append vc-accurev-global-switches args))))
+  (apply 'vc-do-command (or buffer "*vc*") okstatus vc-accurev-program
+	  file-or-list accurev-command args))
 
 (defun vc-accurev--get-status-for-file (file &optional flags function)
   (funcall (if (null function) 'identity function)
@@ -492,7 +489,7 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
       (let ((results '())
 	    str)
 	(with-temp-buffer
-	  (vc-accurev-command t 0 files "stat" "-fxr" flags)
+	  (vc-accurev-command "stat" t 0 files "-fxr" flags)
 	  (setq str (xml-parse-region (point-min) (point-max))))
 	(dolist (element (xml-get-children (xml-node-name str) 'element))
 	  (let ((status (vc-accurev-create-status (xml-get-attribute-or-nil element 'location)))
@@ -518,7 +515,7 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
       (let ((results '())
 	    str)
 	(with-temp-buffer
-	  (vc-accurev-command t 0 nil "show" "wspaces" "-fx")
+	  (vc-accurev-command "show" t 0 nil "wspaces" "-fx")
 	  (setq str (xml-parse-region (point-min) (point-max))))
 	(dolist (element (xml-get-children (xml-node-name str) 'Element))
 	  (let ((wspace (vc-accurev-workspace-create)))
@@ -604,7 +601,7 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
   (let ((default-directory file)
 	(info (vc-accurev-create-info)))
     (with-temp-buffer
-      (vc-accurev-command 't 0 file "info" "-v")
+      (vc-accurev-command "info" 't 0 file "-v")
       (vc-accurev--parse-info info)
       info)))
 
