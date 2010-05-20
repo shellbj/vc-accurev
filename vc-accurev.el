@@ -89,12 +89,16 @@
 ;;; State-changing functions
 ;;;
 
-(defun vc-accurev-register (file &optional rev comment)
+(defun vc-accurev-register (files &optional rev comment)
   "Register FILE into the Accurev version-control system.
 COMMENT can be used to provide an initial description of FILE."
-  (if rev (error "Can't register explicit revision with Accurev"))
-  (vc-accurev-command "add" nil 0 file 
-		      (if comment (concat "-c" comment))))
+  (when rev (error "Can't register explicit revision with Accurev"))
+  (apply 'vc-accurev-command "add" nil 0 files
+	 (if comment
+	     (let ((c (with-temp-file (make-temp-file "vc-accurev")
+			(insert comment)
+			(buffer-file-name))))
+	       (list ("-c" (format "@%s" c)))))))
 
 (defalias 'vc-accurev-responsible-p 'vc-accurev-root
   "Return non-nil if Accurev considers itself
@@ -106,55 +110,16 @@ of new files and for things like change log generation.")
   "Return non-nil if FILE could be registered in Accurev.
 This is only possible if Accurev is responsible for FILE's directory.")
 
-(defun vc-accurev-checkin (file rev comment)
-  "Meta-CVS-specific version of `vc-backend-checkin'."
-  (unless (or (not rev) (vc-accurev-valid-version-number-p rev))
-    (if (not (vc-accurev-valid-symbolic-tag-name-p rev))
-	(error "%s is not a valid symbolic tag name" rev)
-      ;; If the input revision is a valid symbolic tag name, we create it
-      ;; as a branch, commit and switch to it.
-      ;; This file-specific form of branching is deprecated.
-      ;; We can't use `accurev branch' and `accurev switch' because they cannot
-      ;; be applied just to this one file.
-      (apply 'vc-accurev-command nil 0 file "tag" "-b" (list rev))
-      (apply 'vc-accurev-command nil 0 file "update" "-r" (list rev))
-      (vc-file-setprop file 'vc-accurev-sticky-tag rev)
-      (setq rev nil)))
-  ;; This commit might cvs-commit several files (e.g. MAP and TYPES)
-  ;; so using numbered revs here is dangerous and somewhat meaningless.
+(defun vc-accurev-checkin (files rev comment)
+  "Check FILE(S) into Accurev with log message COMMENT."
   (when rev (error "Cannot commit to a specific revision number"))
-  (let ((status (apply 'vc-accurev-command nil 1 file
-		       "ci" "-m" comment
-		       (vc-switches 'ACCUREV 'checkin))))
-    (set-buffer "*vc*")
-    (goto-char (point-min))
-    (when (not (zerop status))
-      ;; Check checkin problem.
-      (cond
-       ((re-search-forward "Up-to-date check failed" nil t)
-        (vc-file-setprop file 'vc-state 'needs-merge)
-        (error (substitute-command-keys
-                (concat "Up-to-date check failed: "
-                        "type \\[vc-next-action] to merge in changes"))))
-       (t
-        (pop-to-buffer (current-buffer))
-        (goto-char (point-min))
-        (shrink-window-if-larger-than-buffer)
-        (error "Check-in failed"))))
-    ;; Update file properties
-    (vc-file-setprop
-     file 'vc-workfile-version
-     (vc-parse-buffer "^\\(new\\|initial\\) revision: \\([0-9.]+\\)" 2))
-    ;; Forget the checkout model of the file, because we might have
-    ;; guessed wrong when we found the file.  After commit, we can
-    ;; tell it from the permissions of the file (see
-    ;; vc-accurev-checkout-model).
-    (vc-file-setprop file 'vc-checkout-model nil)
+  (apply 'vc-accurev-command "keep" nil 0 files
+	 (if comment
+	     (let ((c (with-temp-file (make-temp-file "vc-accurev")
+			(insert comment)
+			(buffer-file-name))))
+	       (list ("-c" (format "@%s" c)))))))
 
-    ;; if this was an explicit check-in (does not include creation of
-    ;; a branch), remove the sticky tag.
-    (if (and rev (not (vc-accurev-valid-symbolic-tag-name-p rev)))
-	(vc-accurev-command nil 0 file "update" "-A"))))
 
 (defun vc-accurev-find-version (file rev buffer)
   (apply 'vc-accurev-command
