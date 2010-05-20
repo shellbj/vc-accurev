@@ -271,14 +271,17 @@ The changes are between FIRST-VERSION and SECOND-VERSION."
 ;;; History functions
 ;;;
 
-(defun vc-accurev-print-log (files &optional buffer)
+(defun vc-accurev-print-log (files buffer &optional shortlog start-revision limit)
   "Insert the revision log for FILES into BUFFER, or the *vc* buffer
-   if BUFFER is nil.  (Note: older versions of this function expected
-   only a single file argument.)"
+if BUFFER is nil. If SHORTLOG is true insert a short version of the log."
+  ;; I'm not sure how useful shortlog is.  Directories are real
+  ;; elements and have histories; accurev doesn't recurse into them
+  ;; for the histories of other children elements like other vcs.
   (vc-setup-buffer buffer)
   (let ((inhibit-read-only t))
     (with-current-buffer buffer
-      (vc-accurev-command buffer 'async files "hist"))))
+      (vc-accurev-command buffer 'async files "hist"
+			  (if shortlog "-ft")))))
 
 (define-derived-mode vc-accurev-log-view-mode log-view-mode "Accurev-Log-View"
   (require 'add-log) ;; we need the faces add-log
