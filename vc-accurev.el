@@ -311,6 +311,16 @@ The changes are between FIRST-VERSION and SECOND-VERSION."
 	   ("[ \t]+merged against:[ \t]+(\\([0-9]+/[0-9]+\\))" nil nil
 	    (1 'change-log-conditionals)))))))
 
+(defun vc-accurev-show-log-entry (revision)
+  "Find entry for patch name REVISION in accurev change log buffer."
+  (goto-char (point-min))
+  (when revision
+    (let (case-fold-search)
+      (if (re-search-forward
+           (concat "^[ \t]+version " (regexp-quote revision)) nil t)
+          (beginning-of-line 0)
+        (goto-char (point-min))))))
+
 ;;;
 ;;; Diff
 ;;;
