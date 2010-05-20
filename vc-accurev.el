@@ -121,15 +121,13 @@ This is only possible if Accurev is responsible for FILE's directory.")
 	       (list ("-c" (format "@%s" c)))))))
 
 
-(defun vc-accurev-find-version (file rev buffer)
-  (apply 'vc-accurev-command
-	 buffer 0 file
-	 "-Q"				; suppress diagnostic output
-	 "update"
-	 (and rev (not (string= rev ""))
-	      (concat "-r" rev))
-	 "-p"
-	 (vc-switches 'ACCUREV 'checkout)))
+(defun vc-accurev-find-revision (file rev buffer)
+  "Fetch revision REV of file FILE and put it into BUFFER.
+If REV is the empty string, fetch the head of the trunk."
+  (with-current-buffer buffer
+    (if (and rev (stringp rev) (not (string= rev "")))
+	(vc-accurev-command "cat" t 0 file "-v" rev)
+      (vc-accurev-command "cat" t 0 file))))
 
 (defun vc-accurev-checkout (file &optional editable rev)
   (message "Checking out %s..." file)
