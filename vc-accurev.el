@@ -54,10 +54,12 @@
 ;;;###autoload 	       (load "vc-accurev")
 ;;;###autoload 	       (vc-accurev-registered file))))
 
- (defun vc-accurev-registered (file)
-   "Return non-nil if FILE is registered with Accurev."
-   (let ((state (vc-accurev-state file)))
-     (not (memq state '(nil unregistered ignored)))))
+(defun vc-accurev-registered (file)
+  "Return non-nil if FILE is registered with Accurev."
+  (let ((dir (vc-accurev-root file)))
+    (when dir
+      (let ((state (vc-accurev-state file)))
+	(not (memq state '(nil unregistered ignored)))))))
 
 (defun vc-accurev-state (file)
   "Return the current version control state of FILE."
@@ -98,11 +100,14 @@ the Accurev command (in that order)."
 	 (vc-switches 'ACCUREV 'register)))
 
 (defalias 'vc-accurev-responsible-p 'vc-accurev-root
-  "Return non-nil if CVS thinks it is responsible for FILE.")
+  "Return non-nil if Accurev considers itself
+\"responsible\" for FILE, which can also be a directory.  This
+function is used to find out what backend to use for registration
+of new files and for things like change log generation.")
 
-(defalias 'vc-cvs-could-register 'vc-cvs-responsible-p
-  "Return non-nil if FILE could be registered in Meta-CVS.
-This is only possible if Meta-CVS is responsible for FILE's directory.")
+(defalias 'vc-accurev-could-register 'vc-accurev-root
+  "Return non-nil if FILE could be registered in Accurev.
+This is only possible if Accurev is responsible for FILE's directory.")
 
 (defun vc-accurev-checkin (file rev comment)
   "Meta-CVS-specific version of `vc-backend-checkin'."
@@ -406,6 +411,17 @@ if there is no revision corresponding to the current line."
 	(match-string-no-properties 1)
       nil)))
 		       
+;;;
+;;; Miscellaneous
+;;;
+(defun vc-accurev-root (file)
+  "Return the root of the VC controlled hierarchy for file."
+  (let (root)
+    (mapc (lambda (x)
+	    (if (string-match (regexp-quote (vc-accurev-workspace->location x)) file)
+		(setq root (vc-accurev-workspace->location x))))
+	  (vc-accurev--get-workspaces))
+    root))
 
 ;;;
 ;;; Snapshot system
@@ -500,6 +516,25 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
     (error)))
 
 
+(defun vc-accurev--get-workspaces (&optional function)
+  (condition-case ()
+      (let ((results '())
+	    str)
+	(with-temp-buffer
+	  (vc-accurev-command t 0 nil "show" "wspaces" "-fx")
+	  (setq str (xml-parse-region (point-min) (point-max))))
+	(dolist (element (xml-get-children (xml-node-name str) 'Element))
+	  (let ((wspace (vc-accurev-workspace-create)))
+	    (add-to-list 'results wspace 't)
+	    (setf (vc-accurev-workspace->name wspace) (xml-get-attribute-or-nil element 'Name))
+	    (setf (vc-accurev-workspace->location wspace) (xml-get-attribute-or-nil element 'Storage))
+	    (setf (vc-accurev-workspace->host wspace) (xml-get-attribute-or-nil element 'Host))
+	    (setf (vc-accurev-workspace->stream wspace) (xml-get-attribute-or-nil element 'Stream))
+	    (setf (vc-accurev-workspace->depot wspace) (xml-get-attribute-or-nil element 'depot))
+	    (setf (vc-accurev-workspace->user wspace) (xml-get-attribute-or-nil element 'user_name))))
+	(funcall (if (null function) 'identity function) results))
+    (error)))
+
 (defun vc-accurev--parse-nested-statuses (stati)
   "Convert a list of accurev statuses into vc states"
   (let ((translation '(("backed" up-to-date . 0)
@@ -579,6 +614,12 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 ;;;
 ;;; Intermediate Structures
 ;;;
+(defstruct (vc-accurev-workspace
+	    (:copier nil)
+	    (:type list)
+	    (:constructor vc-accurev-workspace-create (&optional name location host))
+	    (:conc-name vc-accurev-workspace->))
+  name location host stream depot user)
 
 (defstruct (vc-accurev-info
 	    (:copier nil)
