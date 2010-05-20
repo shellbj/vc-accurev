@@ -91,13 +91,10 @@
 
 (defun vc-accurev-register (file &optional rev comment)
   "Register FILE into the Accurev version-control system.
-COMMENT can be used to provide an initial description of FILE.
-
-`vc-register-switches' and `vc-accurev-register-switches' are passed to
-the Accurev command (in that order)."
-  (apply 'vc-accurev-command nil 0 file "add"
-	 (if comment (concat "-c" comment))
-	 (vc-switches 'ACCUREV 'register)))
+COMMENT can be used to provide an initial description of FILE."
+  (if rev (error "Can't register explicit revision with Accurev"))
+  (vc-accurev-command nil 0 file "add"
+		      (if comment (concat "-c" comment))))
 
 (defalias 'vc-accurev-responsible-p 'vc-accurev-root
   "Return non-nil if Accurev considers itself
