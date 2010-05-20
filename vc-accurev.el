@@ -15,6 +15,8 @@
   (require 'vc)
   (require 'cl))
 
+(require 'xml)
+
 (add-to-list 'vc-handled-backends 'Accurev)
 
 ;; Clear the vc cache to force vc-call to check again and discover new
@@ -53,34 +55,29 @@
 ;;;###autoload 	       (vc-accurev-registered file))))
 
  (defun vc-accurev-registered (file)
-   "Return non-nil if FILE is registered in this backend."
-   (let ((info (vc-accurev--get-info file)))
-     (vc-accurev-info->top info)))
+   "Return non-nil if FILE is registered with Accurev."
+   (let ((state (vc-accurev-state file)))
+     (not (memq state '(nil unregistered ignored)))))
 
 (defun vc-accurev-state (file)
-  "Accurev-specific version of `vc-state'."
-  (with-temp-buffer
-    (vc-accurev-command t 0 file "stat" "-fre")
-    (last (vc-accurev-status->status (vc-accurev--parse-status file)))))
+  "Return the current version control state of FILE."
+  (let ((status (vc-accurev--get-status-for-file file)))
+    (vc-accurev-status->status status)))
 
-(defun vc-accurev-dir-state (dir &optional localp)
-  ;; This would assume the Meta-CVS sandbox is synchronized.
-  ;; (vc-accurev-cvs state file))
-  "Meta-CVS-specific version of `vc-state'."
-  (setq localp (or localp (vc-stay-local-p file)))
-  (let ((default-directory dir))
-    (with-temp-buffer
-      (vc-accurev-command t 0 file "stat" "-fr" (if localp "-m" "-a"))
-      (vc-accurev-parse-status))))
+(defun vc-accurev-dir-status (dir update-function)
+  "Return a list of (FILE STATE EXTRA) entries for DIR."
+  (let ((result nil)
+	(status (vc-accurev--get-status dir)))
+    (dolist (x status) 
+      (push (list (vc-accurev-status->file x)
+		  (vc-accurev-status->status x))
+	    result))
+    (funcall update-function result nil)))
 
-(defun vc-accurev-workfile-version (file)
-  "Return the working revision of FILE.  This is the revision fetched
-   by the last checkout or upate, not necessarily the same thing as the
-   head or tip revision.  Should return \"0\" for a file added but not yet
-   committed."
-  (with-temp-buffer
-    (vc-accurev-command t 0 file "stat" "-fre")
-    (vc-accurev-status->element-target (vc-accurev--parse-status file))))
+(defun vc-accurev-working-revision (file)
+  "Return the working revision of FILE."
+  (let ((status (vc-accurev--get-status-for-file file)))
+    (vc-accurev-status->named-revision status)))
 
 (defun vc-accurev-checkout-model (file)
   "Accurev specific version of `vc-checkout-model'."
@@ -466,53 +463,70 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 	     (cons vc-accurev-global-switches args)
 	   (append vc-accurev-global-switches args))))
 
-(defun vc-accurev--parse-status (&optional filename)
-  "Create a status structure from accurev's output"
-  (let ((file (concat "^\\("
-		      (if filename
-			  (concat "./" (file-relative-name filename))
-			"[^[:space:]]*")
-		      "\\)\\s-+"))
-	status)
-    (goto-char (point-min))
-    (while (not (eobp))
-      (cond ((looking-at (concat file
-				 "\\([^[:space:]]*\\)\\s-+"  ;; element id
-				 "\\([^[:space:]]*\\)\\s-+"  ;; element target
-				 "(\\([^[:space:]]*\\))\\s-+" ;; version
-				 "\\(.*\\)$")) ;; stati
-	       (add-to-list 'status
-			    (vc-accurev-create-status (match-string 1) (match-string 4)
-						      (match-string 3) (match-string 2)
-						      (vc-accurev--parse-nested-statuses (match-string 5)))))
-	      ((looking-at (concat file "\\(.*\\)$")) ;; stati
-	       (add-to-list 'status
-			    (vc-accurev-create-status (match-string 1) nil nil nil
-						      (vc-accurev--parse-nested-statuses (match-string 2))))))
-      (forward-line 1))
-    (if filename (car status)
-      status)))
+(defun vc-accurev--get-status-for-file (file &optional flags function)
+  (funcall (if (null function) 'identity function)
+	   (vc-accurev--get-status file flags (lambda (x)
+						(if (= (length x) 1)
+						    (car x)
+						  x)))))
+
+(defun vc-accurev--get-status (files &optional flags function)
+  "Retrieve all status information about FILES.  This drives other information services."
+  (condition-case ()
+      (let ((results '())
+	    str)
+	(with-temp-buffer
+	  (vc-accurev-command t 0 files "stat" "-fxr" flags)
+	  (setq str (xml-parse-region (point-min) (point-max))))
+	(dolist (element (xml-get-children (xml-node-name str) 'element))
+	  (let ((status (vc-accurev-create-status (xml-get-attribute-or-nil element 'location)))
+		(stati (vc-accurev--parse-nested-statuses (xml-get-attribute-or-nil element 'status))))
+	    (add-to-list 'results status 't)
+	    (setf (vc-accurev-status->real-revision status) (xml-get-attribute-or-nil element 'Real))
+	    (setf (vc-accurev-status->named-revision status) (xml-get-attribute-or-nil element 'namedVersion))
+	    (setf (vc-accurev-status->virtual-revison status) (xml-get-attribute-or-nil element 'Virtual))
+	    (setf (vc-accurev-status->element-id status) (xml-get-attribute-or-nil element 'id))
+	    (setf (vc-accurev-status->element-type status) (xml-get-attribute-or-nil element 'elemType))
+	    (setf (vc-accurev-status->status status) (car stati))
+	    (setf (vc-accurev-status->extra-status status) (cadr stati))
+	    (setf (vc-accurev-status->directory-p status) (xml-get-attribute-or-nil element 'dir))
+	    (setf (vc-accurev-status->hierarchy-type status) (xml-get-attribute-or-nil element 'hierType))
+	    (setf (vc-accurev-status->size status) (xml-get-attribute-or-nil element 'size))
+	    (setf (vc-accurev-status->modified-time status) (xml-get-attribute-or-nil element 'modTime))))
+	(funcall (if (null function) 'identity function) results))
+    (error)))
+
 
 (defun vc-accurev--parse-nested-statuses (stati)
   "Convert a list of accurev statuses into vc states"
-  (if (string-match "(\\([^)]*\\))\\(.*\\)" stati)
-      (let ((rest (match-string 2 stati)))
-	(cons (vc-accurev--state-code (match-string 1 stati))
-	      (vc-accurev--parse-nested-statuses rest)))))
-
-(defun vc-accurev--state-code (code)
-  "Convert from a string to a vc state."
-  (let ((code (or code "")))
-    (cond ((string-match "backed" code) 'up-to-date)
-	  ((string-match "modified" code) 'edited)
-	  ((string-match "stale" code) 'needs-update)
-	  ((string-match "overlap\\|underlap" code) 'needs-merge)
-	  ((string-match "kept" code) 'added)
-	  ((string-match "defunct" code) 'removed)
-;;; ((string-match "" code) 'conflict) ;;; not needed, kept automatically after merge/patch
-	  ((string-match "missing" code) 'missing)
-	  ((string-match "ignored\\|excluded" code) 'ignored)
-	  ((string-match "external\\|no such elem" code) 'unregistered))))
+  (let ((translation '(("backed" up-to-date . 0)
+		       ("modified" edited . 1) 
+		       ("stale" needs-update . 2)
+		       ("overlap" needs-merge . 3)
+		       ("underlap" needs-merge . 3)
+		       ("member" added . 4)
+		       ("kept" added . 4)
+		       ("defunct" removed . 5)
+		       ("missing" missing . 6)
+		       ("excluded" missing . 6)
+		       ("external" unregistered . 10)
+		       ("no such elem" unregistered . 10)))
+	(str stati)
+	(result nil)
+	(rest nil))
+    (while (string-match "(\\([^)]*\\))\\(.*\\)" str)
+      (let ((match (cdr (assoc (match-string 1 str) translation))))
+	(setq str (match-string 2 str))
+	(cond ((null match))
+		; do nothing
+	      ((null result)
+		(setq result match))
+	      ((< (cdr result) (cdr match))
+		(push result rest)
+		(setq result match))
+	      (t
+		(push match rest)))))
+    (list (car result) (mapcar (lambda (x) (car x)) rest))))
 
 (defun vc-accurev--parse-info (info)
   "Create a info structure from accurev's output"
@@ -577,14 +591,20 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 (defstruct (vc-accurev-status
 	    (:copier nil)
 	    (:type list)
-	    (:constructor vc-accurev-create-status (file &optional revision element-target element-id status))
+	    (:constructor vc-accurev-create-status (file &optional real-revison status))
 	    (:conc-name vc-accurev-status->))
   file
-  revision
-  element-target
+  real-revision
+  named-revision
+  virtual-revison
   element-id
   element-type
-  status)
+  status
+  extra-status
+  directory-p
+  hierarchy-type
+  size
+  modified-time)
 
 (provide 'vc-accurev)
 
