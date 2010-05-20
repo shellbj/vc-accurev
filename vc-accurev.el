@@ -325,47 +325,41 @@ The changes are between FIRST-VERSION and SECOND-VERSION."
 ;;; Diff
 ;;;
 
-(defun vc-accurev-diff (file &optional oldvers newvers buffer)
-  "Get a difference report using Accurev between two versions of FILE."
-  (unless buffer (setq buffer "*vc-diff*"))
-  (if (string= (vc-workfile-version file) "0")
-      ;; This file is added but not yet committed; there is no master file.
-      (if (or oldvers newvers)
-	  (error "No revisions of %s exist" file)
-	;; We regard this as "changed".
-	;; Diff it against /dev/null.
-	;; Note: this is NOT a "accurev diff".
-	(apply 'vc-do-command buffer 1 "diff" file
-	       (append (vc-switches nil 'diff) '("/dev/null")))
-	;; Even if it's empty, it's locally modified.
-	1)
-    (let* ((async (and (not vc-disable-async-diff)
-                       (vc-stay-local-p file)
-                       (fboundp 'start-process)))
-	   ;; Run the command from the root dir so that `accurev filt' returns
-	   ;; valid relative names.
-	   (default-directory (vc-accurev-root file))
-	   (status
-	    (apply 'vc-accurev-command buffer
-		   (if async 'async 1)
-		   file "diff"
-		   (and oldvers (concat "-v" oldvers))
-		   (and newvers (concat "-V" newvers))
-		   (vc-switches 'ACCUREV 'diff))))
-      (if async 1 status))))	       ; async diff, pessimistic assumption.
+(defun vc-accurev-diff (files &optional rev1 rev2 buffer)
+  "Insert the diff for FILE into BUFFER, or the *vc-diff* buffer if
+   BUFFER is nil.  If REV1 and REV2 are non-nil, report differences
+   from REV1 to REV2.  If REV1 is nil, use the working revision (as
+   found in the repository) as the older revision; if REV2 is nil,
+   use the current working-copy contents as the newer revision.  This
+   function should pass the value of (vc-switches BACKEND 'diff) to
+   the backend command.  It should return a status of either 0 (no
+   differences found), or 1 (either non-empty diff or the diff is
+   run asynchronously)."
+  (apply 'vc-accurev-command (or buffer "*vc-diff*") async files "diff"
+	 (append
+	  (if (not (or rev1 rev2)) (list "-b")) ;; diff to basis version
+	  (if rev1 (list "-v" rev1))
+	  (if rev2 (list "-V" rev2)))))
 
-(defun vc-accurev-diff-tree (dir &optional rev1 rev2)
-  "Diff all files at and below DIR."
-  (with-current-buffer "*vc-diff*"
-    ;; Run the command from the root dir so that `accurev filt' returns
-    ;; valid relative names.
-    (setq default-directory (vc-accurev-root dir))
-    ;; cvs diff: use a single call for the entire tree
-    (let ((coding-system-for-read (or coding-system-for-read 'undecided)))
-      (apply 'vc-accurev-command "*vc-diff*" 1 dir "diff" "-a"
-	     (and rev1 (concat "-v" rev1))
-	     (and rev2 (concat "-V" rev2))
-	     (vc-switches 'ACCUREV 'diff)))))
+(defun vc-accurev-revision-completion-table (files)
+  "Return a completion table for existing revisions of FILES.
+   The default is to not use any completion table."
+  (lexical-let ((files files)
+		table)
+    (setq table (lazy-completion-table
+		 table (lambda () (vc-accurev--revision-table files))))
+    table))
+
+(defun vc-accurev--revision-table (files)
+  "Return a completion table for existing revisions of FILES.
+   This currently returns virtual versions."
+  (with-temp-buffer
+    (vc-accurev-command t nil files "hist" "-fx")
+    (goto-char (point-min))
+    (let ((ids ()))
+      (while (re-search-forward "\\(?:virtualNamedVersion\\|virtual\\)=\"\\([^\"]+\\)\"" nil t)
+	(push (match-string 1) ids))
+      ids)))
 
 ;;;
 ;;; Annotate
