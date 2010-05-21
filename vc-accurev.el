@@ -130,11 +130,18 @@ If REV is the empty string, fetch the head of the trunk."
       (vc-accurev-command "cat" t 0 file))))
 
 (defun vc-accurev-checkout (file &optional editable rev)
-  (message "Checking out %s..." file)
-  (with-current-buffer (or (get-file-buffer file) (current-buffer))
-    (vc-call update file editable rev (vc-switches 'ACCUREV 'checkout)))
-  (vc-mode-line file)
-  (message "Checking out %s...done" file))
+  "Check out revision REV of FILE into the working area.  If EDITABLE
+is non-nil, FILE should be writable by the user and if locking is
+used for FILE, a lock should also be set.  If REV is non-nil, that
+is the revision to check out (default is the working revision).
+If REV is t, that means to check out the head of the current branch;
+if it is the empty string, check out the head of the trunk.
+
+Currently, this only works for workspace that don't do locking.
+In the future we should take into account a workspace that does
+require a co or anchor."
+  (if rev (error "Operation not supported")
+    nil))
 
 (defun vc-accurev-update (file editable rev switches)
   (if (and (file-exists-p file) (not rev))
