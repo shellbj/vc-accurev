@@ -143,6 +143,20 @@ require a co or anchor."
   (if rev (error "Operation not supported")
     nil))
 
+(defun vc-accurev-revert (file &optional contents-done)
+  "Revert FILE back to the working revision.  If optional
+arg CONTENTS-DONE is non-nil, then the contents of FILE have
+already been reverted from a version backup, and this function
+only needs to update the status of FILE within the backend.
+If FILE is in the `added' state it should be returned to the
+`unregistered' state.
+
+Currently, this only works for workspaces that don't do locking.
+In the future we should take into account a workspace that does
+require a co or anchor."
+  (unless contents-done
+    (with-temp-buffer (vc-accurev-command "purge" t 0 file))))
+
 (defun vc-accurev-update (file editable rev switches)
   (if (and (file-exists-p file) (not rev))
       ;; If no revision was specified, just make the file writable
@@ -169,15 +183,6 @@ require a co or anchor."
 
 (defun vc-accurev-rename-file (old new)
   (vc-accurev-command "move" nil 0 new old))
-
-(defun vc-accurev-revert (file &optional contents-done)
-  "Revert FILE to the version it was based on."
-  (vc-default-revert 'ACCUREV file contents-done)
-  (unless (eq (vc-checkout-model file) 'implicit)
-    (if vc-accurev-use-edit
-        (vc-accurev-command nil 0 file "unedit")
-      ;; Make the file read-only by switching off all w-bits
-      (set-file-modes file (logand (file-modes file) 3950)))))
 
 (defun vc-accurev-merge (file first-version &optional second-version)
   "Merge changes into current working copy of FILE.
