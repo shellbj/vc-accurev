@@ -44,6 +44,14 @@
 		 (repeat :tag "Argument List" :value ("") string))
   :group 'vc-accurev)
 
+;; BACKEND PROPERTIES
+(defun vc-accurev-revision-granularity ()
+  "Takes no arguments.  Returns either 'file or 'repository.  Backends
+that return 'file have per-file revision numbering; backends
+that return 'repository have per-repository revision numbering,
+so a revision level implicitly identifies a changeset."
+  'file)
+
 ;;;
 ;;; State-querying functions
 ;;;
