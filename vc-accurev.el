@@ -426,6 +426,15 @@ if there is no revision corresponding to the current line."
 	  (vc-accurev--get-workspaces))
     root))
 
+(defun vc-accurev-repository-hostname (dirname)
+  "Return the hostname that the backend will have to contact in
+order to operate on a file in DIRNAME.  If the return value is
+nil, it means that the repository is local."
+  (let ((info (vc-accurev--get-info file)))
+    (concat (vc-accurev-info->host info)
+	    ":"
+	    (vc-accurev-info->port info))))
+
 (defun vc-accurev-delete-file (file)
   "Delete FILE and mark it as deleted in the repository."
   (vc-accurev-command "defunct" nil 0 file))
