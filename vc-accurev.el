@@ -215,12 +215,6 @@ require a co or anchor."
 	     (concat "-r" rev))
 	   switches)))
 
-(defun vc-accurev-delete-file (file)
-  (vc-accurev-command "defunct" nil 0 file))
-
-(defun vc-accurev-rename-file (old new)
-  (vc-accurev-command "move" nil 0 new old))
-
 (defun vc-accurev-merge (file first-version &optional second-version)
   "Merge changes into current working copy of FILE.
 The changes are between FIRST-VERSION and SECOND-VERSION."
@@ -431,6 +425,15 @@ if there is no revision corresponding to the current line."
 		(setq root (vc-accurev-workspace->location x))))
 	  (vc-accurev--get-workspaces))
     root))
+
+(defun vc-accurev-delete-file (file)
+  "Delete FILE and mark it as deleted in the repository."
+  (vc-accurev-command "defunct" nil 0 file))
+
+(defun vc-accurev-rename-file (old new)
+  "Rename file OLD to NEW, both in the working area and in the
+repository."
+  (vc-accurev-command "move" nil 0 new old))
 
 ;;;
 ;;; Snapshot system
