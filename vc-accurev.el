@@ -76,13 +76,42 @@ so a revision level implicitly identifies a changeset."
 
 (defun vc-accurev-dir-status (dir update-function)
   "Return a list of (FILE STATE EXTRA) entries for DIR."
+  (funcall update-function
+	   (vc-accurev-dir-status--helper dir 't)
+	   nil))
+
+(defun vc-accurev-dir-status--helper(dir-or-files &optional recursive)
+  "Produce RESULT: a list of lists of the form (FILE VC-STATE
+EXTRA) for the files in DIR.  EXTRA can be used for backend
+specific information about FILE.  If a command needs to be run to
+compute this list, it should be run asynchronously
+using (current-buffer) as the buffer for the command.  When
+RESULT is computed, it should be passed back by doing: (funcall
+UPDATE-FUNCTION RESULT nil).  If the backend uses a process
+filter, hence it produces partial results, they can be passed
+back by doing: (funcall UPDATE-FUNCTION RESULT t) and then do
+a (funcall UPDATE-FUNCTION RESULT nil) when all the results have
+been computed.  To provide more backend specific functionality
+for `vc-dir' the following functions might be needed:
+`dir-extra-headers', `dir-printer', `extra-dir-menu' and
+`dir-status-files'."
   (let ((result nil)
-	(status (vc-accurev--get-status dir)))
-    (dolist (x status) 
+	(status (vc-accurev--get-status dir-or-files recursive)))
+    (dolist (x status)
       (push (list (vc-accurev-status->file x)
 		  (vc-accurev-status->status x))
 	    result))
-    (funcall update-function result nil)))
+    result))
+
+(defun vc-accurev-dir-status-files (dir files default-state update-function)
+  "This function is identical to dir-status except that it should
+only report status for the specified FILES. Also it needs to
+report on all requested files, including up-to-date or ignored
+files. If not provided, the default is to consider that the files
+are in DEFAULT-STATE."
+  (funcall update-function
+	   (vc-accurev-dir-status--helper dir)
+	   nil))
 
 (defun vc-accurev-working-revision (file)
   "Return the working revision of FILE."
@@ -466,13 +495,13 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 						    (car x)
 						  x)))))
 
-(defun vc-accurev--get-status (files &optional flags function)
+(defun vc-accurev--get-status (files &optional recursive flags function)
   "Retrieve all status information about FILES.  This drives other information services."
   (condition-case ()
       (let ((results '())
 	    str)
 	(with-temp-buffer
-	  (vc-accurev-command "stat" t 0 files "-fxr" flags)
+	  (vc-accurev-command "stat" t 0 files "-fxr" (when recursive "-R") flags)
 	  (setq str (xml-parse-region (point-min) (point-max))))
 	(dolist (element (xml-get-children (xml-node-name str) 'element))
 	  (let ((status (vc-accurev-create-status (xml-get-attribute-or-nil element 'location)))
