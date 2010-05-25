@@ -93,12 +93,14 @@
   "Register FILE into the Accurev version-control system.
 COMMENT can be used to provide an initial description of FILE."
   (when rev (error "Can't register explicit revision with Accurev"))
-  (apply 'vc-accurev-command "add" nil 0 files
-	 (if comment
-	     (let ((c (with-temp-file (make-temp-file "vc-accurev")
-			(insert comment)
-			(buffer-file-name))))
-	       (list ("-c" (format "@%s" c)))))))
+  (let (message-file)
+    (apply 'vc-accurev-command "add" nil 0 files
+	   (if comment
+	       (progn
+		 (setq message-file (make-temp-file "vc-accurev"))
+		 (with-temp-file message-file (insert comment))
+		 (list "-c" (format "@%s" message-file)))))
+    (vc-exec-after `(when ,message-file (delete-file ,message-file)))))
 
 (defalias 'vc-accurev-responsible-p 'vc-accurev-root
   "Return non-nil if Accurev considers itself
@@ -113,12 +115,14 @@ This is only possible if Accurev is responsible for FILE's directory.")
 (defun vc-accurev-checkin (files rev comment)
   "Check FILE(S) into Accurev with log message COMMENT."
   (when rev (error "Cannot commit to a specific revision number"))
-  (apply 'vc-accurev-command "keep" nil 0 files
-	 (if comment
-	     (let ((c (with-temp-file (make-temp-file "vc-accurev")
-			(insert comment)
-			(buffer-file-name))))
-	       (list ("-c" (format "@%s" c)))))))
+  (let (message-file)
+    (apply 'vc-accurev-command "keep" nil 0 files
+	   (if comment
+	       (progn
+		 (setq message-file (make-temp-file "vc-accurev"))
+		 (with-temp-file message-file (insert comment))
+		 (list "-c" (format "@%s" message-file)))))
+    (vc-exec-after `(when ,message-file (delete-file ,message-file)))))
 
 
 (defun vc-accurev-find-revision (file rev buffer)
