@@ -102,6 +102,12 @@ COMMENT can be used to provide an initial description of FILE."
 		 (list "-c" (format "@%s" message-file)))))
     (vc-exec-after `(when ,message-file (delete-file ,message-file)))))
 
+(defun vc-accurev-init-revision ()
+  "The initial revision to use when registering FILE if one is
+not specified by the user.  If not provided, the variable
+vc-default-init-revision is used instead."
+  nil)
+
 (defalias 'vc-accurev-responsible-p 'vc-accurev-root
   "Return non-nil if Accurev considers itself
 \"responsible\" for FILE, which can also be a directory.  This
