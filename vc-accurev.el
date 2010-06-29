@@ -81,6 +81,8 @@
   (let ((status (vc-accurev--get-status-for-file file)))
     (vc-accurev-status->named-revision status)))
 
+(defun vc-accurev-revision-granularity () 'file)
+
 (defun vc-accurev-checkout-model (file)
   "Accurev specific version of `vc-checkout-model'."
   'implicit)
