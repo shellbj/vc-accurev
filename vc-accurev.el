@@ -118,6 +118,8 @@ are in DEFAULT-STATE."
   (let ((status (vc-accurev--get-status-for-file file)))
     (vc-accurev-status->named-revision status)))
 
+(defun vc-accurev-revision-granularity () 'file)
+
 (defun vc-accurev-checkout-model (file)
   "Accurev specific version of `vc-checkout-model'."
   'implicit)
@@ -130,12 +132,20 @@ are in DEFAULT-STATE."
   "Register FILE into the Accurev version-control system.
 COMMENT can be used to provide an initial description of FILE."
   (when rev (error "Can't register explicit revision with Accurev"))
-  (apply 'vc-accurev-command "add" nil 0 files
-	 (if comment
-	     (let ((c (with-temp-file (make-temp-file "vc-accurev")
-			(insert comment)
-			(buffer-file-name))))
-	       (list ("-c" (format "@%s" c)))))))
+  (let (message-file)
+    (apply 'vc-accurev-command "add" nil 0 files
+	   (if comment
+	       (progn
+		 (setq message-file (make-temp-file "vc-accurev"))
+		 (with-temp-file message-file (insert comment))
+		 (list "-c" (format "@%s" message-file)))))
+    (vc-exec-after `(when ,message-file (delete-file ,message-file)))))
+
+(defun vc-accurev-init-revision ()
+  "The initial revision to use when registering FILE if one is
+not specified by the user.  If not provided, the variable
+vc-default-init-revision is used instead."
+  nil)
 
 (defalias 'vc-accurev-responsible-p 'vc-accurev-root
   "Return non-nil if Accurev considers itself
@@ -150,12 +160,14 @@ This is only possible if Accurev is responsible for FILE's directory.")
 (defun vc-accurev-checkin (files rev comment)
   "Check FILE(S) into Accurev with log message COMMENT."
   (when rev (error "Cannot commit to a specific revision number"))
-  (apply 'vc-accurev-command "keep" nil 0 files
-	 (if comment
-	     (let ((c (with-temp-file (make-temp-file "vc-accurev")
-			(insert comment)
-			(buffer-file-name))))
-	       (list ("-c" (format "@%s" c)))))))
+  (let (message-file)
+    (apply 'vc-accurev-command "keep" nil 0 files
+	   (if comment
+	       (progn
+		 (setq message-file (make-temp-file "vc-accurev"))
+		 (with-temp-file message-file (insert comment))
+		 (list "-c" (format "@%s" message-file)))))
+    (vc-exec-after `(when ,message-file (delete-file ,message-file)))))
 
 
 (defun vc-accurev-find-revision (file rev buffer)
@@ -444,6 +456,17 @@ nil, it means that the repository is local."
 repository."
   (vc-accurev-command "move" nil 0 new old))
 
+(defun vc-accurev-previous-revision (file rev)
+  "Return the revision number that precedes REV for FILE, or nil if no such
+revision exists."
+  (with-temp-buffer
+    (vc-accurev-command "anc" t 0 file "-fx" (when rev (concat "-v" rev)))
+    (let ((anc (vc-accurev--parse-xml 'vc-accurev-ancestor nil nil
+                                      (lambda (results) (car results))
+                                      :file file)))
+      (if (not (null anc))
+          (format "%s/%s" (oref anc stream) (oref anc version))
+        anc))))
 ;;;
 ;;; Snapshot system
 ;;;
@@ -499,6 +522,24 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
   "A wrapper around `vc-do-command' for use in vc-accurev.el."
   (apply 'vc-do-command (or buffer "*vc*") okstatus vc-accurev-program
 	  file-or-list accurev-command args))
+
+(defun vc-accurev--parse-xml (obj &optional buffer error-function function &rest init-args)
+  "Simple case flow for parsing XML responses with objects"
+  (cond ((null buffer) (setq buffer (current-buffer)))
+        ((null error-function) (setq error-function 'identity))
+        ((null function) (setq function 'identity)))
+  (condition-case var
+      (with-current-buffer buffer
+        (let ((results '())
+              (str (xml-parse-region (point-min) (point-max)))
+              (node-name (oref (make-instance obj) node-name)))
+          (dolist (element (xml-get-children (xml-node-name str) node-name))
+            (let ((instance (apply 'make-instance (append `(,obj) init-args))))
+              (vc-accurev--parse instance element)
+              (add-to-list 'results instance 't)))
+          (funcall function results)))
+    (error (format "ERROR: %s" var))))
+;     (funcall error-function))))
 
 (defun vc-accurev--get-status-for-file (file &optional flags function)
   (funcall (if (null function) 'identity function)
@@ -667,6 +708,27 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
   hierarchy-type
   size
   modified-time)
+
+(defclass vc-accurev-object ()
+  ((node-name :initform 'element :type symbol :allocation :class
+              :documentation "XML node name"))
+  :abstract t)
+
+(defmethod vc-accurev--parse ((ancestor vc-accurev-object) element)
+  "Base class parser; currently does nothing")
+
+(defclass vc-accurev-ancestor (vc-accurev-object)
+  ((file :init-arg :file)
+   (location :init-arg :location)
+   (stream :init-arg :stream)
+   (version :init-arg :version))
+  :documentation "")
+
+(defmethod vc-accurev--parse ((ancestor vc-accurev-ancestor) element)
+  "Set slot values from the supplied XML element"
+  (oset ancestor location (xml-get-attribute-or-nil element 'location))
+  (oset ancestor stream (xml-get-attribute-or-nil element 'stream))
+  (oset ancestor version (xml-get-attribute-or-nil element 'version)))
 
 (provide 'vc-accurev)
 
