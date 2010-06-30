@@ -72,7 +72,7 @@ so a revision level implicitly identifies a changeset."
 (defun vc-accurev-state (file)
   "Return the current version control state of FILE."
   (let ((status (vc-accurev--get-status-for-file file)))
-    (vc-accurev-status->status status)))
+    (oref status status)))
 
 (defun vc-accurev-dir-status (dir update-function)
   "Return a list of (FILE STATE EXTRA) entries for DIR."
@@ -98,8 +98,8 @@ for `vc-dir' the following functions might be needed:
   (let ((result nil)
 	(status (vc-accurev--get-status dir-or-files recursive)))
     (dolist (x status)
-      (push (list (vc-accurev-status->file x)
-		  (vc-accurev-status->status x))
+      (push (list (oref x file)
+		  (oref x status))
 	    result))
     result))
 
@@ -116,7 +116,7 @@ are in DEFAULT-STATE."
 (defun vc-accurev-working-revision (file)
   "Return the working revision of FILE."
   (let ((status (vc-accurev--get-status-for-file file)))
-    (vc-accurev-status->named-revision status)))
+    (oref status named-revision)))
 
 (defun vc-accurev-revision-granularity () 'file)
 
@@ -542,38 +542,17 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
 ;     (funcall error-function))))
 
 (defun vc-accurev--get-status-for-file (file &optional flags function)
-  (funcall (if (null function) 'identity function)
-	   (vc-accurev--get-status file flags (lambda (x)
-						(if (= (length x) 1)
-						    (car x)
-						  x)))))
+  "Retrieve status information about a single FILE."
+  (let ((status (vc-accurev--get-status file nil flags function)))
+    (if (= (length status) 1)
+        (car x)
+      x)))
 
 (defun vc-accurev--get-status (files &optional recursive flags function)
   "Retrieve all status information about FILES.  This drives other information services."
-  (condition-case ()
-      (let ((results '())
-	    str)
-	(with-temp-buffer
-	  (vc-accurev-command "stat" t 0 files "-fxr" (when recursive "-R") flags)
-	  (setq str (xml-parse-region (point-min) (point-max))))
-	(dolist (element (xml-get-children (xml-node-name str) 'element))
-	  (let ((status (vc-accurev-create-status (xml-get-attribute-or-nil element 'location)))
-		(stati (vc-accurev--parse-nested-statuses (xml-get-attribute-or-nil element 'status))))
-	    (add-to-list 'results status 't)
-	    (setf (vc-accurev-status->real-revision status) (xml-get-attribute-or-nil element 'Real))
-	    (setf (vc-accurev-status->named-revision status) (xml-get-attribute-or-nil element 'namedVersion))
-	    (setf (vc-accurev-status->virtual-revison status) (xml-get-attribute-or-nil element 'Virtual))
-	    (setf (vc-accurev-status->element-id status) (xml-get-attribute-or-nil element 'id))
-	    (setf (vc-accurev-status->element-type status) (xml-get-attribute-or-nil element 'elemType))
-	    (setf (vc-accurev-status->status status) (car stati))
-	    (setf (vc-accurev-status->extra-status status) (cadr stati))
-	    (setf (vc-accurev-status->directory-p status) (xml-get-attribute-or-nil element 'dir))
-	    (setf (vc-accurev-status->hierarchy-type status) (xml-get-attribute-or-nil element 'hierType))
-	    (setf (vc-accurev-status->size status) (xml-get-attribute-or-nil element 'size))
-	    (setf (vc-accurev-status->modified-time status) (xml-get-attribute-or-nil element 'modTime))))
-	(funcall (if (null function) 'identity function) results))
-    (error)))
-
+  (with-temp-buffer
+    (vc-accurev-command "stat" t 0 files "-fxr" (when recursive "-R") flags)
+    (vc-accurev--parse-xml 'vc-accurev-status nil nil function)))
 
 (defun vc-accurev--get-workspaces (&optional function)
   (condition-case ()
@@ -691,31 +670,10 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
   domain port client-version server-time client-time
   host bin shell)
 
-(defstruct (vc-accurev-status
-	    (:copier nil)
-	    (:type list)
-	    (:constructor vc-accurev-create-status (file &optional real-revison status))
-	    (:conc-name vc-accurev-status->))
-  file
-  real-revision
-  named-revision
-  virtual-revison
-  element-id
-  element-type
-  status
-  extra-status
-  directory-p
-  hierarchy-type
-  size
-  modified-time)
-
 (defclass vc-accurev-object ()
   ((node-name :initform 'element :type symbol :allocation :class
               :documentation "XML node name"))
   :abstract t)
-
-(defmethod vc-accurev--parse ((ancestor vc-accurev-object) element)
-  "Base class parser; currently does nothing")
 
 (defclass vc-accurev-ancestor (vc-accurev-object)
   ((file :init-arg :file)
@@ -724,11 +682,45 @@ If UPDATE is non-nil, then update (resynch) any affected buffers."
    (version :init-arg :version))
   :documentation "")
 
+(defclass vc-accurev-status ()
+  ((file :init-arg :file)
+   (real-revision :init-arg :real-revision)
+   (named-revision :init-arg :named-revision)
+   (virtual-revison :init-arg :virtual-revison)
+   (element-id :init-arg :element-id)
+   (element-type :init-arg :element-type)
+   (status :init-arg :status)
+   (extra-status :init-arg :extra-status)
+   (directory-p :init-arg :directory-p)
+   (hierarchy-type :init-arg :hierarchy-type)
+   (size :init-arg :size)
+   (modified-time :init-arg :modified-time))
+  :documentation "")
+
+(defmethod vc-accurev--parse ((ancestor vc-accurev-object) element)
+  "Base class parser; currently does nothing")
+
 (defmethod vc-accurev--parse ((ancestor vc-accurev-ancestor) element)
   "Set slot values from the supplied XML element"
   (oset ancestor location (xml-get-attribute-or-nil element 'location))
   (oset ancestor stream (xml-get-attribute-or-nil element 'stream))
   (oset ancestor version (xml-get-attribute-or-nil element 'version)))
+
+(defmethod vc-accurev--parse ((status vc-accurev-status) element)
+  "Set slot values from the supplied output element"
+  (let ((stati (vc-accurev--parse-nested-statuses (xml-get-attribute-or-nil element 'status))))
+    (oset status file (xml-get-attribute-or-nil element 'location)
+    (oset status real-revision (xml-get-attribute-or-nil element 'Real))
+    (oset status named-revision (xml-get-attribute-or-nil element 'namedVersion))
+    (oset status virtual-revison (xml-get-attribute-or-nil element 'Virtual))
+    (oset status element-id (xml-get-attribute-or-nil element 'id))
+    (oset status element-type (xml-get-attribute-or-nil element 'elemType))
+    (oset status status (car stati))
+    (oset status extra-status (cadr stati))
+    (oset status size (xml-get-attribute-or-nil element 'size))
+    (oset status directory-p (xml-get-attribute-or-nil element 'dir))
+    (oset status hierarchy-type (xml-get-attribute-or-nil element 'hierType))
+    (oset status modified-time (xml-get-attribute-or-nil element 'modTime)))))
 
 (provide 'vc-accurev)
 
