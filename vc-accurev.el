@@ -13,7 +13,8 @@
 
 (eval-when-compile
   (require 'vc)
-  (require 'cl))
+  (require 'cl)
+  (require 'eieio))
 
 (require 'xml)
 
