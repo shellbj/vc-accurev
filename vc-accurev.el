@@ -13,7 +13,8 @@
 
 (eval-when-compile
   (require 'vc)
-  (require 'cl))
+  (require 'cl)
+  (require 'eieio))
 
 (require 'xml)
 
@@ -355,7 +356,7 @@ if BUFFER is nil. If SHORTLOG is true insert a short version of the log."
    the backend command.  It should return a status of either 0 (no
    differences found), or 1 (either non-empty diff or the diff is
    run asynchronously)."
-  (apply 'vc-accurev-command "diff" (or buffer "*vc-diff*") async files 
+  (apply 'vc-accurev-command "diff" (or buffer "*vc-diff*") 'async files 
 	 (append
 	  (if (not (or rev1 rev2)) (list "-b")) ;; diff to basis version
 	  (if rev1 (list "-v" rev1))
